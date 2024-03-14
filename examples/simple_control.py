@@ -25,6 +25,7 @@ SHOW_CAM = True
 distance = 2.0
 T = 100
 
+
 def show_image(image):
     # Convert the image.raw_data to a numpy array
     image_array = np.frombuffer(image.raw_data, dtype=np.dtype("uint8"))
@@ -41,13 +42,13 @@ def show_image(image):
     # front_camera = image_array
 
 
-def connect_to_server():
+def connect_to_server(localhost, timeout):
     """
     连接到Carla服务器并返回客户端对象
     """
     try:
-        client = carla.Client('localhost', 2000)
-        client.set_timeout(50.0)
+        client = carla.Client('localhost', localhost)
+        client.set_timeout(timeout)
         return client
     except Exception as e:
         print(f"连接服务器时出现错误：{e}")
@@ -93,27 +94,19 @@ def set_spectator_transform(world):
         print(f"设置观察者位置和方向时出现错误：{e}")
 
 
-def get_spawn_points(world):
+def draw_spawn_points(world):
     """
     获取生成点列表
-    """
-    try:
-        m = world.get_map()
-        spawn_points = m.get_spawn_points()
-        return spawn_points
-    except Exception as e:
-        print(f"获取生成点列表时出现错误：{e}")
-        return None
-
-
-def draw_spawn_points(world, spawn_points):
-    """
     在Carla世界中绘制生成点
     """
+    m = world.get_map()
+    spawn_points = m.get_spawn_points()
     for i, spawn_point in enumerate(spawn_points):
         world.debug.draw_string(spawn_point.location, str(i), life_time=100)
         world.debug.draw_arrow(spawn_point.location, spawn_point.location + spawn_point.get_forward_vector(),
                                life_time=100)
+
+    return spawn_points
 
 
 def global_path_planning(world, spawn_points, start_index, end_index):
@@ -162,6 +155,7 @@ def set_synchronized_mode(world, client):
         # 恢复原始设置
         world.apply_settings(original_settings)
 
+
 def spawn_camera(world, ego_vehicle, callback, x=0, y=0, z=0, pitch=0):
     """
     在指定位置和旋转角度上生成相机，并注册回调函数
@@ -182,20 +176,20 @@ def spawn_camera(world, ego_vehicle, callback, x=0, y=0, z=0, pitch=0):
     camera.listen(callback)
     return camera
 
-client = connect_to_server()
+
+client = connect_to_server(localhost=2000, timeout=50.0)
 if client:
     world = client.get_world()
     if world:
         set_world_settings(world, synchronous_mode=False)
         spectator = set_spectator_transform(world)
-        spawn_points = get_spawn_points(world)
+        # spawn_points = get_spawn_points(world)
         # set_synchronized_mode(world, client)
-        if spawn_points:
-            draw_spawn_points(world, spawn_points)
-            route = global_path_planning(world, spawn_points, 88, 27)
-            if route:
-                wps = [waypoint[0] for waypoint in route]
-                draw_waypoints(world, wps)
+        spawn_points = draw_spawn_points(world)
+        route = global_path_planning(world, spawn_points, 88, 27)
+        if route:
+            wps = [waypoint[0] for waypoint in route]
+            draw_waypoints(world, wps)
 
 blueprint_library = world.get_blueprint_library()
 
@@ -203,7 +197,6 @@ blueprint_library = world.get_blueprint_library()
 ego_bp = blueprint_library.find('vehicle.tesla.cybertruck')
 ego = world.spawn_actor(ego_bp, spawn_points[88])
 camera = spawn_camera(world, ego, show_image, x=-5, y=0, z=3, pitch=-20)
-
 
 # PID
 # args_lateral_dict = {'K_P': 1.95, 'K_I': 0.05, 'K_D': 0.2, 'dt': 0.05}
@@ -217,9 +210,6 @@ PID = VehiclePIDController(ego, args_lateral=args_lateral_dict, args_longitudina
 i = 0
 target_speed = 30
 next = wps[0]
-
-
-
 
 try:
     while True:
