@@ -183,7 +183,6 @@ if client:
     if world:
         set_world_settings(world, synchronous_mode=False)
         spectator = set_spectator_transform(world)
-        # spawn_points = get_spawn_points(world)
         # set_synchronized_mode(world, client)
         spawn_points = draw_spawn_points(world)
         route = global_path_planning(world, spawn_points, 88, 27)
