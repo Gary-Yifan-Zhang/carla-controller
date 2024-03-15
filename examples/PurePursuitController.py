@@ -270,18 +270,14 @@ waypoint_list = []
 for wp in wps:
     waypoint_list.insert(wps.index(wp), (wp.transform.location.x, wp.transform.location.y))
 
-# args_long_dict = {'K_P': 1, 'K_D': 0.0, 'K_I': 0.75, 'dt': 1.0 / 10.0}
-pid = PIDLongitudinalController(ego, K_P=1, K_I=0.0, K_D=0.75, dt=0.01)
-# 使用示例
-# 初始化PID控制器
-# pid_controller = PIDLongitudinalController(ego, args_long_dict)
+pid = PIDLongitudinalController(ego, K_P=1, K_I=0.75, K_D=0.0, dt=0.01)
+
 
 # 假设目标速度和当前速度
 target_speed = 20  # 目标速度，单位为km/h
 
 
 # Generate waypoints
-noOfWp = 100
 t = 0
 
 try:
@@ -314,8 +310,6 @@ try:
 
         e = np.sin(alpha) * ld
 
-
-        # current_speed = get_speed(ego)
         throttle = pid.run_step(target_speed, True)
         control = carla.VehicleControl()
         if throttle >= 0.0:
@@ -323,26 +317,11 @@ try:
             control.brake = 0.0
         else:
             control.throttle = 0.0
-            control.brake = min(abs(throttle), 0.05)
+            control.brake = min(abs(throttle), 0.3)
 
         steer_angle = calc_steering_angle(alpha, ld)
         control.steer = steer_angle
 
-        print(control)
-
-        # if current_steering > self.past_steering + 0.1:
-        #     current_steering = self.past_steering + 0.1
-        # elif current_steering < self.past_steering - 0.1:
-        #     current_steering = self.past_steering - 0.1
-        #
-        # if current_steering >= 0:
-        #     steering = min(self.max_steer, current_steering)
-        # else:
-        #     steering = max(-self.max_steer, current_steering)
-
-        # print("throttle: ", throttle)
-
-        # control.throttle = throttle
         ego.apply_control(control)
 
 
