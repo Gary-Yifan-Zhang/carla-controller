@@ -20,8 +20,9 @@ import carla
 import numpy as np
 import pygame
 from agents.navigation.global_route_planner import GlobalRoutePlanner
-from agents.navigation.controller import VehiclePIDController
+from agents.navigation.controller import PIDLongitudinalController
 from agents.tools.misc import draw_waypoints, distance_vehicle, vector
+from agents.tools.misc import get_speed
 
 SHOW_CAM = True
 distance = 2.0
@@ -247,7 +248,7 @@ if client:
             if route:
                 wps = [waypoint[0] for waypoint in route]
                 draw_waypoints(world, wps)
-print(type(wps[0]))
+# print(type(wps[0]))
 blueprint_library = world.get_blueprint_library()
 
 # spawn ego vehicle
@@ -256,8 +257,8 @@ ego = world.spawn_actor(ego_bp, spawn_points[88])
 camera = spawn_camera(world, ego, show_image, x=-5, y=0, z=3, pitch=-20)
 
 control = carla.VehicleControl()
-control.throttle = 0.5
-ego.apply_control(control)
+# control.throttle = 0.3
+# ego.apply_control(control)
 
 i = 0
 target_speed = 30
@@ -269,7 +270,15 @@ waypoint_list = []
 for wp in wps:
     waypoint_list.insert(wps.index(wp), (wp.transform.location.x, wp.transform.location.y))
 
-print(waypoint_list)
+# args_long_dict = {'K_P': 1, 'K_D': 0.0, 'K_I': 0.75, 'dt': 1.0 / 10.0}
+pid = PIDLongitudinalController(ego, K_P=0.1, K_I=0.1, K_D=0.1, dt=1.0 / 10.0)
+# 使用示例
+# 初始化PID控制器
+# pid_controller = PIDLongitudinalController(ego, args_long_dict)
+
+# 假设目标速度和当前速度
+target_speed = 20  # 目标速度，单位为km/h
+
 
 # Generate waypoints
 noOfWp = 100
@@ -286,6 +295,7 @@ try:
         world.debug.draw_point(next.transform.location, color=carla.Color(r=255), life_time=T)
         ego_dist = distance_vehicle(next, ego_transform)
         ego_vel = ego.get_velocity()
+        # print(ego_vel)
 
         vf = np.sqrt(ego_vel.x ** 2 + ego_vel.y ** 2)
         vf = np.fmax(np.fmin(vf, 2.5), 0.1)
@@ -306,7 +316,11 @@ try:
 
         steer_angle = calc_steering_angle(alpha, ld)
         control.steer = steer_angle
+        current_speed = get_speed(ego)
+        throttle = pid.run_step(target_speed, current_speed)
+        control.throttle = throttle
         ego.apply_control(control)
+
 
         time.sleep(0.5)
         t += 1
