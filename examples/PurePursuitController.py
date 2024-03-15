@@ -247,7 +247,7 @@ if client:
             if route:
                 wps = [waypoint[0] for waypoint in route]
                 draw_waypoints(world, wps)
-
+print(type(wps[0]))
 blueprint_library = world.get_blueprint_library()
 
 # spawn ego vehicle
@@ -262,30 +262,21 @@ ego.apply_control(control)
 i = 0
 target_speed = 30
 next = wps[0]
-print(wps)
 
 waypoint_obj_list = []
 waypoint_list = []
 
+for wp in wps:
+    waypoint_list.insert(wps.index(wp), (wp.transform.location.x, wp.transform.location.y))
+
+print(waypoint_list)
+
 # Generate waypoints
 noOfWp = 100
 t = 0
-while t < len(wps):
-    # wp_next = wp.next(2.0)
-    # print(wp_next)
-    if len(wps) > 1:
-        wp = wps[1]
-        # print(wp)
-    else:
-        wp = wps[0]
-
-    waypoint_obj_list.append(wp)
-    waypoint_list.insert(t, (wp.transform.location.x, wp.transform.location.y))
-    # draw(wp.transform.location, type="string")
-    t += 1
 
 try:
-    while True:
+    while t < len(wps):
         ego_transform = ego.get_transform()
         spectator.set_transform(
             carla.Transform(ego_transform.location + carla.Location(z=80), carla.Rotation(pitch=-90)))
@@ -318,7 +309,7 @@ try:
         ego.apply_control(control)
 
         time.sleep(0.5)
-        # t += 1
+        t += 1
 
         world.wait_for_tick()
 
