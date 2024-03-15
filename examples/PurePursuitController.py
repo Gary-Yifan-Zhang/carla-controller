@@ -3,6 +3,7 @@ import os
 import sys
 import cv2
 import math
+import time
 
 sys.path.append("D:\\CARLA_0.9.15\\WindowsNoEditor\\PythonAPI\\carla")
 sys.path.append("D:\\CARLA_0.9.15\\WindowsNoEditor\\PythonAPI\\carla\\agents")
@@ -25,6 +26,12 @@ from agents.tools.misc import draw_waypoints, distance_vehicle, vector
 SHOW_CAM = True
 distance = 2.0
 T = 100
+
+L = 2.875
+Kdd = 4.0
+alpha_prev = 0
+delta_prev = 0
+
 
 def show_image(image):
     # Convert the image.raw_data to a numpy array
@@ -51,11 +58,11 @@ def connect_to_server():
         client.set_timeout(50.0)
         return client
     except Exception as e:
-        print(f"连接服务器时出现错误：{e}")
+        print(f"An error occurred while connecting to the server: {e}")
         return None
 
 
-def set_world_settings(world, synchronous_mode=True):
+def set_world_settings(world, synchronous_mode=False):
     """
     设置Carla世界的设置，包括固定的时间步和同步模式
     Args:
@@ -74,7 +81,7 @@ def set_world_settings(world, synchronous_mode=True):
             traffic_manager = carla.Client('localhost', 2000).get_trafficmanager()
             traffic_manager.set_synchronous_mode(True)
     except Exception as e:
-        print(f"设置同步模式时出现错误：{e}")
+        print(f"Error occurred while setting the synchronization mode: {e}")
         # 恢复原始设置
         world.apply_settings(original_settings)
 
@@ -91,7 +98,7 @@ def set_spectator_transform(world):
         spectator.set_transform(bv_transform)
         return spectator
     except Exception as e:
-        print(f"设置观察者位置和方向时出现错误：{e}")
+        print(f"Error occurred while retrieving the list of spawn points：{e}")
 
 
 def get_spawn_points(world):
@@ -159,9 +166,10 @@ def set_synchronized_mode(world, client):
         traffic_manager = client.get_trafficmanager()
         traffic_manager.set_synchronous_mode(True)
     except Exception as e:
-        print(f"设置同步模式时出现错误：{e}")
+        print(f"Error occurred while setting the synchronization mode: {e}")
         # 恢复原始设置
         world.apply_settings(original_settings)
+
 
 def spawn_camera(world, ego_vehicle, callback, x=0, y=0, z=0, pitch=0):
     """
@@ -182,6 +190,7 @@ def spawn_camera(world, ego_vehicle, callback, x=0, y=0, z=0, pitch=0):
     camera = world.spawn_actor(camera_bp, camera_trans, attach_to=ego_vehicle)
     camera.listen(callback)
     return camera
+
 
 def get_target_wp_index(veh_location, waypoint_list):
     dxl, dyl = [], []
@@ -216,6 +225,14 @@ def calc_steering_angle(alpha, ld):
 
     return delta
 
+
+def get_lookahead_dist(vf, idx, waypoint_list, dist):
+    ld = Kdd * vf
+    # while ld > dist[idx] and (idx+1) < len(waypoint_list):
+    #     idx += 1
+    return ld
+
+
 client = connect_to_server()
 if client:
     world = client.get_world()
@@ -238,9 +255,34 @@ ego_bp = blueprint_library.find('vehicle.tesla.cybertruck')
 ego = world.spawn_actor(ego_bp, spawn_points[88])
 camera = spawn_camera(world, ego, show_image, x=-5, y=0, z=3, pitch=-20)
 
+control = carla.VehicleControl()
+control.throttle = 0.5
+ego.apply_control(control)
+
 i = 0
 target_speed = 30
 next = wps[0]
+print(wps)
+
+waypoint_obj_list = []
+waypoint_list = []
+
+# Generate waypoints
+noOfWp = 100
+t = 0
+while t < len(wps):
+    # wp_next = wp.next(2.0)
+    # print(wp_next)
+    if len(wps) > 1:
+        wp = wps[1]
+        # print(wp)
+    else:
+        wp = wps[0]
+
+    waypoint_obj_list.append(wp)
+    waypoint_list.insert(t, (wp.transform.location.x, wp.transform.location.y))
+    # draw(wp.transform.location, type="string")
+    t += 1
 
 try:
     while True:
@@ -252,14 +294,33 @@ try:
         world.debug.draw_point(ego_loc, color=carla.Color(r=255), life_time=T)
         world.debug.draw_point(next.transform.location, color=carla.Color(r=255), life_time=T)
         ego_dist = distance_vehicle(next, ego_transform)
-        ego_val =
+        ego_vel = ego.get_velocity()
 
+        vf = np.sqrt(ego_vel.x ** 2 + ego_vel.y ** 2)
+        vf = np.fmax(np.fmin(vf, 2.5), 0.1)
 
+        min_index, tx, ty, dist = get_target_wp_index(ego_loc, waypoint_list)
+        ld = get_lookahead_dist(vf, min_index, waypoint_list, dist)
+
+        yaw = np.radians(ego_transform.rotation.yaw)
+        alpha = math.atan2(ty - ego_loc.y, tx - ego_loc.x) - yaw
+        # alpha = np.arccos((ex*np.cos(yaw)+ey*np.sin(yaw))/ld)
+
+        if math.isnan(alpha):
+            alpha = alpha_prev
+        else:
+            alpha_prev = alpha
+
+        e = np.sin(alpha) * ld
+
+        steer_angle = calc_steering_angle(alpha, ld)
+        control.steer = steer_angle
+        ego.apply_control(control)
+
+        time.sleep(0.5)
+        # t += 1
 
         world.wait_for_tick()
-
-
-
 
 
 finally:

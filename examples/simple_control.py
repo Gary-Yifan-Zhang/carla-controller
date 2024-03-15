@@ -42,12 +42,13 @@ def show_image(image):
     # front_camera = image_array
 
 
-def connect_to_server(localhost, timeout):
+def connect_to_server(port, timeout):
     """
     连接到Carla服务器并返回客户端对象
     """
     try:
-        client = carla.Client('localhost', localhost)
+        client = carla.Client(host='127.0.0.1', port=2000)
+        # client = carla.Client('localhost', port)
         client.set_timeout(timeout)
         return client
     except Exception as e:
@@ -177,7 +178,7 @@ def spawn_camera(world, ego_vehicle, callback, x=0, y=0, z=0, pitch=0):
     return camera
 
 
-client = connect_to_server(localhost=2000, timeout=50.0)
+client = connect_to_server(port=2000, timeout=50.0)
 if client:
     world = client.get_world()
     if world:
