@@ -248,7 +248,8 @@ if client:
             if route:
                 wps = [waypoint[0] for waypoint in route]
                 draw_waypoints(world, wps)
-# print(type(wps[0]))
+
+next = wps[0]
 blueprint_library = world.get_blueprint_library()
 
 # spawn ego vehicle
@@ -257,14 +258,7 @@ ego = world.spawn_actor(ego_bp, spawn_points[88])
 camera = spawn_camera(world, ego, show_image, x=-5, y=0, z=3, pitch=-20)
 
 control = carla.VehicleControl()
-# control.throttle = 0.3
-# ego.apply_control(control)
 
-i = 0
-target_speed = 30
-next = wps[0]
-
-waypoint_obj_list = []
 waypoint_list = []
 
 for wp in wps:
@@ -272,16 +266,13 @@ for wp in wps:
 
 pid = PIDLongitudinalController(ego, K_P=1, K_I=0.75, K_D=0.0, dt=0.01)
 
-
-# 假设目标速度和当前速度
-target_speed = 20  # 目标速度，单位为km/h
-
+target_speed = 30
 
 # Generate waypoints
-t = 0
-
+i = 0
+past_steering = 0
 try:
-    while t < len(wps):
+    while True:
         ego_transform = ego.get_transform()
         spectator.set_transform(
             carla.Transform(ego_transform.location + carla.Location(z=80), carla.Rotation(pitch=-90)))
@@ -310,7 +301,7 @@ try:
 
         e = np.sin(alpha) * ld
 
-        throttle = pid.run_step(target_speed, True)
+        throttle = pid.run_step(target_speed)
         control = carla.VehicleControl()
         if throttle >= 0.0:
             control.throttle = min(throttle, 0.5)
@@ -320,14 +311,35 @@ try:
             control.brake = min(abs(throttle), 0.3)
 
         steer_angle = calc_steering_angle(alpha, ld)
-        control.steer = steer_angle
+        if steer_angle > past_steering + 0.1:
+            steer_angle = past_steering + 0.1
+        elif steer_angle < past_steering - 0.1:
+            steer_angle = past_steering - 0.1
+
+        if steer_angle >= 0:
+            steering = min(0.8, steer_angle)
+        else:
+            steering = max(-0.8, steer_angle)
+
+        control.steer = steering
 
         ego.apply_control(control)
 
+        past_steering = steering
 
-        time.sleep(0.5)
-        t += 1
+        if i == (len(wps) - 1):
+            control.brake = 1
+            ego.apply_control(control)
+            print('this trip finish')
+            time.sleep(10)
+            break
+        print(ego_dist)
+        if ego_dist < 2:
+            i = i + 1
+            next = wps[i]
+            ego.apply_control(control)
 
+        # print(i)
         world.wait_for_tick()
 
 
