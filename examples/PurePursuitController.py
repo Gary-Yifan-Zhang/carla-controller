@@ -2,6 +2,7 @@ import glob
 import os
 import sys
 import cv2
+import math
 
 sys.path.append("D:\\CARLA_0.9.15\\WindowsNoEditor\\PythonAPI\\carla")
 sys.path.append("D:\\CARLA_0.9.15\\WindowsNoEditor\\PythonAPI\\carla\\agents")
@@ -182,6 +183,39 @@ def spawn_camera(world, ego_vehicle, callback, x=0, y=0, z=0, pitch=0):
     camera.listen(callback)
     return camera
 
+def get_target_wp_index(veh_location, waypoint_list):
+    dxl, dyl = [], []
+    for i in range(len(waypoint_list)):
+        dx = abs(veh_location.x - waypoint_list[i][0])
+        dxl.append(dx)
+        dy = abs(veh_location.y - waypoint_list[i][1])
+        dyl.append(dy)
+
+    dist = np.hypot(dxl, dyl)
+    idx = np.argmin(dist) + 4
+
+    # take closest waypoint, else last wp
+    if idx < len(waypoint_list):
+        tx = waypoint_list[idx][0]
+        ty = waypoint_list[idx][1]
+    else:
+        tx = waypoint_list[-1][0]
+        ty = waypoint_list[-1][1]
+
+    return idx, tx, ty, dist
+
+
+def calc_steering_angle(alpha, ld):
+    delta_prev = 0
+    delta = math.atan2(2 * L * np.sin(alpha), ld)
+    delta = np.fmax(np.fmin(delta, 1.0), -1.0)
+    if math.isnan(delta):
+        delta = delta_prev
+    else:
+        delta_prev = delta
+
+    return delta
+
 client = connect_to_server()
 if client:
     world = client.get_world()
@@ -203,3 +237,32 @@ blueprint_library = world.get_blueprint_library()
 ego_bp = blueprint_library.find('vehicle.tesla.cybertruck')
 ego = world.spawn_actor(ego_bp, spawn_points[88])
 camera = spawn_camera(world, ego, show_image, x=-5, y=0, z=3, pitch=-20)
+
+i = 0
+target_speed = 30
+next = wps[0]
+
+try:
+    while True:
+        ego_transform = ego.get_transform()
+        spectator.set_transform(
+            carla.Transform(ego_transform.location + carla.Location(z=80), carla.Rotation(pitch=-90)))
+
+        ego_loc = ego.get_location()
+        world.debug.draw_point(ego_loc, color=carla.Color(r=255), life_time=T)
+        world.debug.draw_point(next.transform.location, color=carla.Color(r=255), life_time=T)
+        ego_dist = distance_vehicle(next, ego_transform)
+        ego_val =
+
+
+
+        world.wait_for_tick()
+
+
+
+
+
+finally:
+    ego.destroy()
+    camera.stop()
+    pygame.quit()
