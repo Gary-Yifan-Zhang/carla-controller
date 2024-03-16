@@ -29,7 +29,7 @@ class InitHelper:
         self.client.set_timeout(timeout)
         self.world = self.client.get_world()
 
-    def connect_to_server(self):
+    def connect2server(self):
         """
         连接到Carla服务器并返回客户端对象
         """
@@ -85,15 +85,15 @@ class InitHelper:
 
         return spawn_points
 
-    def global_path_planning(self, start_index, end_index):
+    def global_path_planning(self, start_location, end_location):
         """
         全局路径规划
         """
         m = self.world.get_map()
         grp = GlobalRoutePlanner(m, self.distance)
         spawn_points = self.draw_spawn_points()  # 获取生成点列表
-        origin = carla.Location(spawn_points[start_index].location)
-        destination = carla.Location(spawn_points[end_index].location)
+        origin = carla.Location(start_location)
+        destination = carla.Location(end_location)
         route = grp.trace_route(origin, destination)
         return route
 

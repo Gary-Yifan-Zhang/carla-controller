@@ -58,6 +58,8 @@ waypoints = map.generate_waypoints(2.0)
 vehicle_loc = vehicle.get_location()
 wp = map.get_waypoint(vehicle_loc, project_to_road=True,
                       lane_type=carla.LaneType.Driving)
+print("wp: ", wp)
+print("wp type: ", type(wp))
 
 waypoint_list = []
 waypoint_obj_list = []
@@ -135,6 +137,7 @@ while t < noOfWp:
     wp_next = wp.next(2.0)
     if len(wp_next) > 1:
         wp = wp_next[1]
+        # print(wp)
     else:
         wp = wp_next[0]
 
@@ -142,7 +145,7 @@ while t < noOfWp:
     waypoint_list.insert(t, (wp.transform.location.x, wp.transform.location.y))
     draw(wp.transform.location, type="string")
     t += 1
-
+print(waypoint_list)
 # Game Loop
 t = 0
 while t < noOfWp:

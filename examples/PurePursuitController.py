@@ -21,8 +21,7 @@ import numpy as np
 import pygame
 from agents.navigation.global_route_planner import GlobalRoutePlanner
 from agents.navigation.controller import PIDLongitudinalController
-from agents.tools.misc import draw_waypoints, distance_vehicle, vector
-from agents.tools.misc import get_speed
+from agents.tools.misc import draw_waypoints, distance_vehicle, vector, get_speed
 
 SHOW_CAM = True
 distance = 2.0
@@ -333,7 +332,7 @@ try:
             print('this trip finish')
             time.sleep(10)
             break
-        print(ego_dist)
+
         if ego_dist < 2:
             i = i + 1
             next = wps[i]
