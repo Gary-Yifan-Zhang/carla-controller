@@ -44,6 +44,69 @@ Kdd = 4.0
 alpha_prev = 0
 delta_prev = 0
 
+def get_target_wp_index(veh_location, waypoint_list):
+    dxl, dyl = [], []
+    for i in range(len(waypoint_list)):
+        dx = abs(veh_location.x - waypoint_list[i][0])
+        dxl.append(dx)
+        dy = abs(veh_location.y - waypoint_list[i][1])
+        dyl.append(dy)
+
+    dist = np.hypot(dxl, dyl)
+    idx = np.argmin(dist) + 4
+
+    # take closest waypoint, else last wp
+    if idx < len(waypoint_list):
+        tx = waypoint_list[idx][0]
+        ty = waypoint_list[idx][1]
+    else:
+        tx = waypoint_list[-1][0]
+        ty = waypoint_list[-1][1]
+
+    return idx, tx, ty, dist
+
+def get_global_yaw(start_point, end_point):
+    """
+    计算全局航向角（yaw），即起始点到结束点的方位角（角度）
+    Args:
+        start_point: 起始点的坐标，形式为 [x, y]
+        end_point: 结束点的坐标，形式为 [x, y]
+    Returns:
+        全局航向角（yaw）的角度值
+    """
+    dx = end_point[0] - start_point[0]
+    dy = end_point[1] - start_point[1]
+    yaw = np.arctan2(dy, dx) * 180 / np.pi
+    return yaw
+
+def get_valid_angle(angle):
+    """
+    将角度限制在 -180 到 180 的范围内
+    Args:
+        angle: 待限制的角度值
+    Returns:
+        限制在 -180 到 180 范围内的角度值
+    """
+    while angle > np.pi:
+        angle -= 2 * np.pi
+    while angle < - np.pi:
+        angle += 2 * np.pi
+    return angle
+
+def get_dist(x1, y1, x2, y2):
+    """
+    计算两点之间的欧几里德距离
+    Args:
+        x1, y1: 第一个点的坐标
+        x2, y2: 第二个点的坐标
+    Returns:
+        两点之间的欧几里德距离
+    """
+    dx = x2 - x1
+    dy = y2 - y1
+    distance = math.sqrt(dx**2 + dy**2)
+    return distance
+
 init_helper = InitHelper()
 
 client = init_helper.connect2server()
@@ -90,6 +153,10 @@ target_speed = 30
 # Generate waypoints
 i = 0
 
+# min_idx = 0
+
+past_steering = 0
+
 try:
     while True:
         ego_transform = ego.get_transform()
@@ -101,68 +168,78 @@ try:
         world.debug.draw_point(next.transform.location, color=carla.Color(r=255), life_time=T)
         ego_dist = distance_vehicle(next, ego_transform)
 
+        v = get_speed(ego)
+
         yaw = np.radians(ego_transform.rotation.yaw)
-        # 1. calculate heading error
-        yaw_path = np.arctan2(waypoint_list[-1][1] - waypoint_list[0][1], waypoint_list[-1][0] - waypoint_list[0][0])
-        yaw_diff = yaw_path - yaw
-        if yaw_diff > np.pi:
-            yaw_diff -= 2 * np.pi
-        if yaw_diff < - np.pi:
-            yaw_diff += 2 * np.pi
+        # yaw = ego_transform.rotation.yaw
 
 
-        # 2. calculate crosstrack error
-        current_xy = np.array([ego_loc.x, ego_loc.y])
-        crosstrack_error = np.min(np.sum((current_xy - np.array(waypoint_list)[:, :2]) ** 2, axis=1))
+        min_index, tx, ty, dist = get_target_wp_index(ego_loc, waypoint_list)
+        # print(min_index)
+        dis1 = dist[min_index]
+        # Code sample of Stanley Control
+        # trajectory_yaw = get_global_yaw(waypoint_list[-1], waypoint_list[0])
+        # trajectory_yaw = get_global_yaw(waypoint_list[min_index+1], waypoint_list[min_index-1])
 
-        yaw_cross_track = np.arctan2(ego_loc.y - waypoint_list[0][1], ego_loc.x - waypoint_list[0][0])
-        yaw_path2ct = yaw_path - yaw_cross_track
-        if yaw_path2ct > np.pi:
-            yaw_path2ct -= 2 * np.pi
-        if yaw_path2ct < - np.pi:
-            yaw_path2ct += 2 * np.pi
-        if yaw_path2ct > 0:
-            crosstrack_error = abs(crosstrack_error)
+        trajectory_yaw = np.arctan2(waypoint_list[min_index][1] - waypoint_list[min_index-1][1], waypoint_list[min_index][0] - waypoint_list[min_index-1][0])
+        # heading error
+        heading_error = trajectory_yaw - yaw
+        heading_error = get_valid_angle(heading_error)
+        # print(heading_error)
+        # print(dis1)
+        for idx in range(len(waypoint_list)):
+            dis = get_dist(ego_loc.x, ego_loc.y, waypoint_list[idx][0], waypoint_list[idx][1])
+            if idx == 0:
+                e_r = dis1
+            if dis < e_r:
+                e_r = dis1
+                min_idx = idx
+
+        # print(e_r)
+
+        min_path_yaw = np.arctan2(waypoint_list[min_index ][1] - ego_loc.y,
+                                    waypoint_list[min_index][0]- ego_loc.x)
+        # min_path_yaw = get_global_yaw(waypoint_list[min_index], [ego_loc.x, ego_loc.y])
+        cross_yaw_error = min_path_yaw - yaw
+        cross_yaw_error = get_valid_angle(cross_yaw_error)
+        if cross_yaw_error > 0:
+            e_r = e_r
         else:
-            crosstrack_error = - abs(crosstrack_error)
-
-        ego_vel = ego.get_velocity()
-
-        vf = get_speed(ego)
-        # vf = np.fmax(np.fmin(vf, 2.5), 0.1)
-
-        yaw_diff_crosstrack = np.arctan(k_e * crosstrack_error / (k_v + vf))
-
-        # print(crosstrack_error, yaw_diff, yaw_diff_crosstrack)
-
-        # 3. control low
-        steer_expect = yaw_diff + yaw_diff_crosstrack
-        if steer_expect > np.pi:
-            steer_expect -= 2 * np.pi
-        if steer_expect < - np.pi:
-            steer_expect += 2 * np.pi
-        steer_expect = min(1.22, steer_expect)
-        steer_expect = max(-1.22, steer_expect)
+            e_r = -e_r
+        delta_error = np.arctan(1.0 * e_r / (v + 1.0e-6))
+        steer_angle = heading_error + delta_error
+        # print(steer_output)
 
         # 4. update
-        steer_output = steer_expect
+        # steer_output = steer_expect
 
-        throttle = pid.run_step(target_speed)
+        # throttle = pid.run_step(target_speed)
+        # control = carla.VehicleControl()
         control = carla.VehicleControl()
-        throttle = pid.run_step(target_speed)
-        control = carla.VehicleControl()
+        throttle = pid.run_step(target_speed, True)
+
         if throttle >= 0.0:
             control.throttle = min(throttle, 0.5)
             control.brake = 0.0
         else:
             control.throttle = 0.0
-            control.brake = min(abs(throttle), 0.3)
+            control.brake = min(abs(throttle), 0.5)
 
-        control.steer = steer_output
-        control.throttle = throttle
+        if steer_angle > past_steering + 0.1:
+            steer_angle = past_steering + 0.1
+        elif steer_angle < past_steering - 0.1:
+            steer_angle = past_steering - 0.1
+
+        if steer_angle >= 0:
+            steering = min(0.8, steer_angle)
+        else:
+            steering = max(-0.8, steer_angle)
+
+        control.steer = steering
+        # control.throttle = throttle
 
         ego.apply_control(control)
-
+        past_steering = steer_angle
 
         if i == (len(wps) - 1):
             control.brake = 1
