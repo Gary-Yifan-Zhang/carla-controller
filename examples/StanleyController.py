@@ -34,6 +34,16 @@ from agents.tools.misc import draw_waypoints, distance_vehicle, vector
 from agents.tools.misc import get_speed
 from utils.InitHelper import InitHelper
 from utils.CameraHelper import CameraHelper
+
+SHOW_CAM = True
+distance = 2.0
+T = 100
+
+L = 2.875
+Kdd = 4.0
+alpha_prev = 0
+delta_prev = 0
+
 init_helper = InitHelper()
 
 client = init_helper.connect2server()
@@ -75,41 +85,101 @@ steer_output = 0
 k_e = 0.3
 k_v = 10
 
-# 1. calculate heading error
-yaw_path = np.arctan2(waypoints[-1][1] - waypoints[0][1], waypoints[-1][0] - waypoints[0][0])
-yaw_diff = yaw_path - yaw
-if yaw_diff > np.pi:
-    yaw_diff -= 2 * np.pi
-if yaw_diff < - np.pi:
-    yaw_diff += 2 * np.pi
+target_speed = 30
 
-# 2. calculate crosstrack error
-current_xy = np.array([x, y])
-crosstrack_error = np.min(np.sum((current_xy - np.array(waypoints)[:, :2]) ** 2, axis=1))
+# Generate waypoints
+i = 0
 
-yaw_cross_track = np.arctan2(y - waypoints[0][1], x - waypoints[0][0])
-yaw_path2ct = yaw_path - yaw_cross_track
-if yaw_path2ct > np.pi:
-    yaw_path2ct -= 2 * np.pi
-if yaw_path2ct < - np.pi:
-    yaw_path2ct += 2 * np.pi
-if yaw_path2ct > 0:
-    crosstrack_error = abs(crosstrack_error)
-else:
-    crosstrack_error = - abs(crosstrack_error)
+try:
+    while True:
+        ego_transform = ego.get_transform()
+        ego_loc = ego.get_location()
+        spectator.set_transform(
+            carla.Transform(ego_transform.location + carla.Location(z=80), carla.Rotation(pitch=-90)))
 
-yaw_diff_crosstrack = np.arctan(k_e * crosstrack_error / (k_v + v))
+        world.debug.draw_point(ego_loc, color=carla.Color(r=255), life_time=T)
+        world.debug.draw_point(next.transform.location, color=carla.Color(r=255), life_time=T)
+        ego_dist = distance_vehicle(next, ego_transform)
 
-print(crosstrack_error, yaw_diff, yaw_diff_crosstrack)
+        yaw = np.radians(ego_transform.rotation.yaw)
+        # 1. calculate heading error
+        yaw_path = np.arctan2(waypoint_list[-1][1] - waypoint_list[0][1], waypoint_list[-1][0] - waypoint_list[0][0])
+        yaw_diff = yaw_path - yaw
+        if yaw_diff > np.pi:
+            yaw_diff -= 2 * np.pi
+        if yaw_diff < - np.pi:
+            yaw_diff += 2 * np.pi
 
-# 3. control low
-steer_expect = yaw_diff + yaw_diff_crosstrack
-if steer_expect > np.pi:
-    steer_expect -= 2 * np.pi
-if steer_expect < - np.pi:
-    steer_expect += 2 * np.pi
-steer_expect = min(1.22, steer_expect)
-steer_expect = max(-1.22, steer_expect)
 
-# 4. update
-steer_output = steer_expect
+        # 2. calculate crosstrack error
+        current_xy = np.array([ego_loc.x, ego_loc.y])
+        crosstrack_error = np.min(np.sum((current_xy - np.array(waypoint_list)[:, :2]) ** 2, axis=1))
+
+        yaw_cross_track = np.arctan2(ego_loc.y - waypoint_list[0][1], ego_loc.x - waypoint_list[0][0])
+        yaw_path2ct = yaw_path - yaw_cross_track
+        if yaw_path2ct > np.pi:
+            yaw_path2ct -= 2 * np.pi
+        if yaw_path2ct < - np.pi:
+            yaw_path2ct += 2 * np.pi
+        if yaw_path2ct > 0:
+            crosstrack_error = abs(crosstrack_error)
+        else:
+            crosstrack_error = - abs(crosstrack_error)
+
+        ego_vel = ego.get_velocity()
+
+        vf = np.sqrt(ego_vel.x ** 2 + ego_vel.y ** 2)
+        vf = np.fmax(np.fmin(vf, 2.5), 0.1)
+
+        yaw_diff_crosstrack = np.arctan(k_e * crosstrack_error / (k_v + vf))
+
+        print(crosstrack_error, yaw_diff, yaw_diff_crosstrack)
+
+        # 3. control low
+        steer_expect = yaw_diff + yaw_diff_crosstrack
+        if steer_expect > np.pi:
+            steer_expect -= 2 * np.pi
+        if steer_expect < - np.pi:
+            steer_expect += 2 * np.pi
+        steer_expect = min(1.22, steer_expect)
+        steer_expect = max(-1.22, steer_expect)
+
+        # 4. update
+        steer_output = steer_expect
+
+        throttle = pid.run_step(target_speed)
+        control = carla.VehicleControl()
+        throttle = pid.run_step(target_speed)
+        control = carla.VehicleControl()
+        if throttle >= 0.0:
+            control.throttle = min(throttle, 0.5)
+            control.brake = 0.0
+        else:
+            control.throttle = 0.0
+            control.brake = min(abs(throttle), 0.3)
+
+        control.steer = steer_output
+        control.throttle = throttle
+
+        ego.apply_control(control)
+
+
+        if i == (len(wps) - 1):
+            control.brake = 1
+            ego.apply_control(control)
+            print('this trip finish')
+            time.sleep(10)
+            break
+
+        if ego_dist < 2:
+            i = i + 1
+            next = wps[i]
+            ego.apply_control(control)
+
+        # print(i)
+        world.wait_for_tick()
+
+finally:
+    ego.destroy()
+    camera.stop()
+    pygame.quit()

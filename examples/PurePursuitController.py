@@ -300,7 +300,7 @@ try:
 
         e = np.sin(alpha) * ld
 
-        throttle = pid.run_step(target_speed)
+        throttle = pid.run_step(target_speed, True)
         control = carla.VehicleControl()
         if throttle >= 0.0:
             control.throttle = min(throttle, 0.5)
