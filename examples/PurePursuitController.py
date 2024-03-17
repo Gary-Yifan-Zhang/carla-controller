@@ -283,22 +283,23 @@ try:
         ego_vel = ego.get_velocity()
         # print(ego_vel)
 
-        vf = np.sqrt(ego_vel.x ** 2 + ego_vel.y ** 2)
+        vf = get_speed(ego)
         vf = np.fmax(np.fmin(vf, 2.5), 0.1)
-
-        min_index, tx, ty, dist = get_target_wp_index(ego_loc, waypoint_list)
-        ld = get_lookahead_dist(vf, min_index, waypoint_list, dist)
-
         yaw = np.radians(ego_transform.rotation.yaw)
-        alpha = math.atan2(ty - ego_loc.y, tx - ego_loc.x) - yaw
-        # alpha = np.arccos((ex*np.cos(yaw)+ey*np.sin(yaw))/ld)
+        min_index, tx, ty, dist = get_target_wp_index(ego_loc, waypoint_list)
 
-        if math.isnan(alpha):
-            alpha = alpha_prev
-        else:
-            alpha_prev = alpha
+        # Pure Persuit Control
+        y_delta = ty - ego_loc.y
+        x_delta = tx - ego_loc.x
+        alpha = np.arctan(y_delta / x_delta) - yaw
 
-        e = np.sin(alpha) * ld
+        if alpha > np.pi / 2:
+            alpha -= np.pi
+        if alpha < - np.pi / 2:
+            alpha += np.pi
+
+        steer_angle = np.arctan(2 * 3 * np.sin(alpha) / (Kdd * vf))
+
 
         throttle = pid.run_step(target_speed, True)
         control = carla.VehicleControl()
@@ -309,7 +310,7 @@ try:
             control.throttle = 0.0
             control.brake = min(abs(throttle), 0.3)
 
-        steer_angle = calc_steering_angle(alpha, ld)
+        # steer_angle = calc_steering_angle(alpha, ld)
         if steer_angle > past_steering + 0.1:
             steer_angle = past_steering + 0.1
         elif steer_angle < past_steering - 0.1:

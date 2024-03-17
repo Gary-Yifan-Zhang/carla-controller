@@ -128,12 +128,12 @@ try:
 
         ego_vel = ego.get_velocity()
 
-        vf = np.sqrt(ego_vel.x ** 2 + ego_vel.y ** 2)
-        vf = np.fmax(np.fmin(vf, 2.5), 0.1)
+        vf = get_speed(ego)
+        # vf = np.fmax(np.fmin(vf, 2.5), 0.1)
 
         yaw_diff_crosstrack = np.arctan(k_e * crosstrack_error / (k_v + vf))
 
-        print(crosstrack_error, yaw_diff, yaw_diff_crosstrack)
+        # print(crosstrack_error, yaw_diff, yaw_diff_crosstrack)
 
         # 3. control low
         steer_expect = yaw_diff + yaw_diff_crosstrack
