@@ -44,6 +44,17 @@ alpha_prev = 0
 delta_prev = 0
 
 
+def calculate_trajectory_yaw(waypoint_list, min_idx):
+    if min_idx + 5 < len(waypoint_list):
+        yaw = np.arctan2(waypoint_list[min_idx + 3][1] - waypoint_list[min_idx - 1][1],
+                         waypoint_list[min_idx + 3][0] - waypoint_list[min_idx - 1][0])
+    else:
+        yaw = np.arctan2(waypoint_list[-1][1] - waypoint_list[min_idx - 1][1],
+                         waypoint_list[-1][0] - waypoint_list[min_idx - 1][0])
+
+    return yaw
+
+
 def get_target_wp_index(veh_location, waypoint_list):
     dxl, dyl = [], []
     for i in range(len(waypoint_list)):
@@ -110,6 +121,36 @@ def get_dist(x1, y1, x2, y2):
     distance = math.sqrt(dx ** 2 + dy ** 2)
     return distance
 
+def calculate_steer_angle(ego, waypoint_list, k):
+    v = get_speed(ego)
+    yaw = np.radians(ego_transform.rotation.yaw)
+
+    min_idx = 1
+    for idx in range(len(waypoint_list)):
+        dis = get_dist(ego_loc.x, ego_loc.y, waypoint_list[idx][0], waypoint_list[idx][1])
+        if idx == 0:
+            e_r = dis
+        if dis < e_r:
+            e_r = dis
+            min_idx = idx
+
+    trajectory_yaw = calculate_trajectory_yaw(waypoint_list, min_idx)
+    heading_error = trajectory_yaw - yaw
+    heading_error = get_valid_angle(heading_error)
+
+    min_path_yaw = np.arctan2(waypoint_list[min_idx][1] - ego_loc.y,
+                              waypoint_list[min_idx][0] - ego_loc.x)
+    cross_yaw_error = min_path_yaw - yaw
+    cross_yaw_error = get_valid_angle(cross_yaw_error)
+    if cross_yaw_error > 0:
+        e_r = e_r
+    else:
+        e_r = -e_r
+    delta_error = np.arctan(k * e_r / (v + 1.0e-6))
+    steer_angle = heading_error + delta_error
+
+    return steer_angle
+
 
 init_helper = InitHelper()
 
@@ -118,7 +159,7 @@ world = init_helper.world
 init_helper.set_world_settings()
 spectator = init_helper.set_spectator_transform()
 spawn_pts = init_helper.draw_spawn_points()
-route = init_helper.global_path_planning(spawn_pts[88].location, spawn_pts[27].location)
+route = init_helper.global_path_planning(spawn_pts[132].location, spawn_pts[27].location)
 
 wps = [waypoint[0] for waypoint in route]
 init_helper.draw_waypoints(wps)
@@ -128,7 +169,7 @@ blueprint_library = world.get_blueprint_library()
 
 # spawn ego vehicle
 ego_bp = blueprint_library.find('vehicle.tesla.cybertruck')
-ego = world.spawn_actor(ego_bp, spawn_pts[88])
+ego = world.spawn_actor(ego_bp, spawn_pts[132])
 camera_helper = CameraHelper(world, ego)
 camera_location = carla.Location(x=-5, z=3)
 camera_rotation = carla.Rotation(pitch=-20)
@@ -143,17 +184,12 @@ for wp in wps:
 
 pid = PIDLongitudinalController(ego, K_P=1, K_I=0.75, K_D=0.0, dt=0.01)
 
-# Change the steer output with the lateral controller.
-steer_output = 0
-
 # Use stanley controller for lateral control
 
 target_speed = 30
 
 # Generate waypoints
 i = 0
-
-min_idx = 1
 
 past_steering = 0
 
@@ -168,40 +204,9 @@ try:
         world.debug.draw_point(next.transform.location, color=carla.Color(g=255), life_time=T)
         ego_dist = distance_vehicle(next, ego_transform)
 
-        v = get_speed(ego)
-
-        yaw = np.radians(ego_transform.rotation.yaw)
-
-        for idx in range(len(waypoint_list)):
-            dis = get_dist(ego_loc.x, ego_loc.y, waypoint_list[idx][0], waypoint_list[idx][1])
-            if idx == 0:
-                e_r = dis
-            if dis < e_r:
-                e_r = dis
-                min_idx = idx
-
-        trajectory_yaw = np.arctan2(waypoint_list[min_idx + 5][1] - waypoint_list[min_idx - 1][1],
-                                    waypoint_list[min_idx + 5][0] - waypoint_list[min_idx - 1][0])
-        # heading error
-        heading_error = trajectory_yaw - yaw
-        heading_error = get_valid_angle(heading_error)
-        # print(e_r)
-
-        min_path_yaw = np.arctan2(waypoint_list[min_idx][1] - ego_loc.y,
-                                  waypoint_list[min_idx][0] - ego_loc.x)
-        # min_path_yaw = get_global_yaw(waypoint_list[min_index], [ego_loc.x, ego_loc.y])
-        cross_yaw_error = min_path_yaw - yaw
-        cross_yaw_error = get_valid_angle(cross_yaw_error)
-        if cross_yaw_error > 0:
-            e_r = e_r
-        else:
-            e_r = -e_r
-        delta_error = np.arctan(5.0 * e_r / (v + 1.0e-6))
-        steer_angle = heading_error + delta_error
-        # print(steer_output)
+        steer_angle = calculate_steer_angle(ego, waypoint_list, 4.0)
 
         # 4. update
-        # steer_output = steer_expect
 
         control = carla.VehicleControl()
         throttle = pid.run_step(target_speed)
@@ -224,7 +229,6 @@ try:
             steering = max(-0.8, steer_angle)
 
         control.steer = steering
-        # control.throttle = throttle
 
         ego.apply_control(control)
         past_steering = steer_angle
@@ -233,13 +237,12 @@ try:
             control.brake = 1
             ego.apply_control(control)
             print('this trip finish')
-            time.sleep(10)
+            time.sleep(3)
             break
 
         if ego_dist < 2:
             i = i + 1
             next = wps[i]
-            print(i)
             ego.apply_control(control)
 
         # print(i)
