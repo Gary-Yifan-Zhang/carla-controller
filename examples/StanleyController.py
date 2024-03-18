@@ -147,9 +147,6 @@ pid = PIDLongitudinalController(ego, K_P=1, K_I=0.75, K_D=0.0, dt=0.01)
 steer_output = 0
 
 # Use stanley controller for lateral control
-# 0. spectify stanley params
-k_e = 0.3
-k_v = 10
 
 target_speed = 30
 
@@ -174,17 +171,7 @@ try:
         v = get_speed(ego)
 
         yaw = np.radians(ego_transform.rotation.yaw)
-        # yaw = ego_transform.rotation.yaw
 
-        min_index, tx, ty, dist = get_target_wp_index(ego_loc, waypoint_list)
-        print(min_index)
-        dis1 = dist[min_index]
-        # Code sample of Stanley Control
-        # trajectory_yaw = get_global_yaw(waypoint_list[-1], waypoint_list[0])
-        # trajectory_yaw = get_global_yaw(waypoint_list[min_index+1], waypoint_list[min_index-1])
-
-        # print(heading_error)
-        # print(dis1)
         for idx in range(len(waypoint_list)):
             dis = get_dist(ego_loc.x, ego_loc.y, waypoint_list[idx][0], waypoint_list[idx][1])
             if idx == 0:
@@ -193,8 +180,8 @@ try:
                 e_r = dis
                 min_idx = idx
 
-        trajectory_yaw = np.arctan2(waypoint_list[min_idx + 1][1] - waypoint_list[min_idx - 1][1],
-                                    waypoint_list[min_idx + 1][0] - waypoint_list[min_idx - 1][0])
+        trajectory_yaw = np.arctan2(waypoint_list[min_idx + 5][1] - waypoint_list[min_idx - 1][1],
+                                    waypoint_list[min_idx + 5][0] - waypoint_list[min_idx - 1][0])
         # heading error
         heading_error = trajectory_yaw - yaw
         heading_error = get_valid_angle(heading_error)
@@ -216,8 +203,6 @@ try:
         # 4. update
         # steer_output = steer_expect
 
-        # throttle = pid.run_step(target_speed)
-        # control = carla.VehicleControl()
         control = carla.VehicleControl()
         throttle = pid.run_step(target_speed)
 
@@ -264,3 +249,4 @@ finally:
     ego.destroy()
     camera.stop()
     pygame.quit()
+
