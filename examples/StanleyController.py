@@ -165,7 +165,7 @@ try:
             carla.Transform(ego_transform.location + carla.Location(z=80), carla.Rotation(pitch=-90)))
 
         world.debug.draw_point(ego_loc, color=carla.Color(r=255), life_time=T)
-        world.debug.draw_point(next.transform.location, color=carla.Color(r=255), life_time=T)
+        world.debug.draw_point(next.transform.location, color=carla.Color(g=255), life_time=T)
         ego_dist = distance_vehicle(next, ego_transform)
 
         v = get_speed(ego)
@@ -175,16 +175,13 @@ try:
 
 
         min_index, tx, ty, dist = get_target_wp_index(ego_loc, waypoint_list)
-        # print(min_index)
+        print(min_index)
         dis1 = dist[min_index]
         # Code sample of Stanley Control
         # trajectory_yaw = get_global_yaw(waypoint_list[-1], waypoint_list[0])
         # trajectory_yaw = get_global_yaw(waypoint_list[min_index+1], waypoint_list[min_index-1])
 
-        trajectory_yaw = np.arctan2(waypoint_list[min_index][1] - waypoint_list[min_index-1][1], waypoint_list[min_index][0] - waypoint_list[min_index-1][0])
-        # heading error
-        heading_error = trajectory_yaw - yaw
-        heading_error = get_valid_angle(heading_error)
+
         # print(heading_error)
         # print(dis1)
         for idx in range(len(waypoint_list)):
@@ -195,10 +192,15 @@ try:
                 e_r = dis1
                 min_idx = idx
 
+        trajectory_yaw = np.arctan2(waypoint_list[min_idx + 1][1] - waypoint_list[min_idx - 1][1],
+                                    waypoint_list[min_idx + 1][0] - waypoint_list[min_idx - 1][0])
+        # heading error
+        heading_error = trajectory_yaw - yaw
+        heading_error = get_valid_angle(heading_error)
         # print(e_r)
 
-        min_path_yaw = np.arctan2(waypoint_list[min_index ][1] - ego_loc.y,
-                                    waypoint_list[min_index][0]- ego_loc.x)
+        min_path_yaw = np.arctan2(waypoint_list[min_idx][1] - ego_loc.y,
+                                    waypoint_list[min_idx][0]- ego_loc.x)
         # min_path_yaw = get_global_yaw(waypoint_list[min_index], [ego_loc.x, ego_loc.y])
         cross_yaw_error = min_path_yaw - yaw
         cross_yaw_error = get_valid_angle(cross_yaw_error)
@@ -216,7 +218,7 @@ try:
         # throttle = pid.run_step(target_speed)
         # control = carla.VehicleControl()
         control = carla.VehicleControl()
-        throttle = pid.run_step(target_speed, True)
+        throttle = pid.run_step(target_speed)
 
         if throttle >= 0.0:
             control.throttle = min(throttle, 0.5)
@@ -251,6 +253,7 @@ try:
         if ego_dist < 2:
             i = i + 1
             next = wps[i]
+            print(i)
             ego.apply_control(control)
 
         # print(i)
