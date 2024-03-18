@@ -13,7 +13,6 @@ import time
 sys.path.append("D:\\CARLA_0.9.15\\WindowsNoEditor\\PythonAPI\\carla")
 sys.path.append("D:\\CARLA_0.9.15\\WindowsNoEditor\\PythonAPI\\carla\\agents")
 
-
 try:
     sys.path.append(glob.glob('../carla/dist/carla-*%d.%d-%s.egg' % (
         sys.version_info.major,
@@ -44,6 +43,7 @@ Kdd = 4.0
 alpha_prev = 0
 delta_prev = 0
 
+
 def get_target_wp_index(veh_location, waypoint_list):
     dxl, dyl = [], []
     for i in range(len(waypoint_list)):
@@ -65,6 +65,7 @@ def get_target_wp_index(veh_location, waypoint_list):
 
     return idx, tx, ty, dist
 
+
 def get_global_yaw(start_point, end_point):
     """
     计算全局航向角（yaw），即起始点到结束点的方位角（角度）
@@ -78,6 +79,7 @@ def get_global_yaw(start_point, end_point):
     dy = end_point[1] - start_point[1]
     yaw = np.arctan2(dy, dx) * 180 / np.pi
     return yaw
+
 
 def get_valid_angle(angle):
     """
@@ -93,6 +95,7 @@ def get_valid_angle(angle):
         angle += 2 * np.pi
     return angle
 
+
 def get_dist(x1, y1, x2, y2):
     """
     计算两点之间的欧几里德距离
@@ -104,8 +107,9 @@ def get_dist(x1, y1, x2, y2):
     """
     dx = x2 - x1
     dy = y2 - y1
-    distance = math.sqrt(dx**2 + dy**2)
+    distance = math.sqrt(dx ** 2 + dy ** 2)
     return distance
+
 
 init_helper = InitHelper()
 
@@ -139,7 +143,6 @@ for wp in wps:
 
 pid = PIDLongitudinalController(ego, K_P=1, K_I=0.75, K_D=0.0, dt=0.01)
 
-
 # Change the steer output with the lateral controller.
 steer_output = 0
 
@@ -153,7 +156,7 @@ target_speed = 30
 # Generate waypoints
 i = 0
 
-# min_idx = 0
+min_idx = 1
 
 past_steering = 0
 
@@ -173,7 +176,6 @@ try:
         yaw = np.radians(ego_transform.rotation.yaw)
         # yaw = ego_transform.rotation.yaw
 
-
         min_index, tx, ty, dist = get_target_wp_index(ego_loc, waypoint_list)
         print(min_index)
         dis1 = dist[min_index]
@@ -181,15 +183,14 @@ try:
         # trajectory_yaw = get_global_yaw(waypoint_list[-1], waypoint_list[0])
         # trajectory_yaw = get_global_yaw(waypoint_list[min_index+1], waypoint_list[min_index-1])
 
-
         # print(heading_error)
         # print(dis1)
         for idx in range(len(waypoint_list)):
             dis = get_dist(ego_loc.x, ego_loc.y, waypoint_list[idx][0], waypoint_list[idx][1])
             if idx == 0:
-                e_r = dis1
+                e_r = dis
             if dis < e_r:
-                e_r = dis1
+                e_r = dis
                 min_idx = idx
 
         trajectory_yaw = np.arctan2(waypoint_list[min_idx + 1][1] - waypoint_list[min_idx - 1][1],
@@ -200,7 +201,7 @@ try:
         # print(e_r)
 
         min_path_yaw = np.arctan2(waypoint_list[min_idx][1] - ego_loc.y,
-                                    waypoint_list[min_idx][0]- ego_loc.x)
+                                  waypoint_list[min_idx][0] - ego_loc.x)
         # min_path_yaw = get_global_yaw(waypoint_list[min_index], [ego_loc.x, ego_loc.y])
         cross_yaw_error = min_path_yaw - yaw
         cross_yaw_error = get_valid_angle(cross_yaw_error)
@@ -208,7 +209,7 @@ try:
             e_r = e_r
         else:
             e_r = -e_r
-        delta_error = np.arctan(1.0 * e_r / (v + 1.0e-6))
+        delta_error = np.arctan(5.0 * e_r / (v + 1.0e-6))
         steer_angle = heading_error + delta_error
         # print(steer_output)
 
